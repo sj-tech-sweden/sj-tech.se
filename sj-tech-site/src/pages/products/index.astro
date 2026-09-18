@@ -1,0 +1,24 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import ProductCard from '../../components/ProductCard.astro';
+import { products } from '../../data/products';
+
+const inStockCount = products.filter((p) => p.inStock).length;
+---
+
+<Layout title="Produkter | SJ-Tech" activePath="/products">
+  <section class="py-20 max-w-6xl mx-auto px-4">
+    <div class="text-center max-w-2xl mx-auto mb-16">
+      <h1 class="text-3xl font-bold text-white mb-4">Produkter & Utrustning</h1>
+      <p class="text-slate-400">
+        För närvarande {inStockCount} av {products.length} produkter i lager. Detta är en förberedande sida – sortimentet byggs på dynamiskt.
+      </p>
+    </div>
+
+    <div class="grid md:grid-cols-3 gap-8">
+      {products.map((product) => (
+        <ProductCard product={product} />
+      ))}
+    </div>
+  </section>
+</Layout>
