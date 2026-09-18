@@ -1,0 +1,40 @@
+---
+import { Image } from 'astro:assets';
+import logo from '../assets/logo-sj-tech-gron-vit-2.png';
+
+interface Props {
+  activePath?: string;
+}
+
+const { activePath = '' } = Astro.props;
+
+const navItems = [
+  { href: '/', label: 'Hem' },
+  { href: '/#services', label: 'Tjänster' },
+];
+---
+
+<header class="border-b border-slate-800 bg-slate-900/80 backdrop-blur sticky top-0 z-50">
+  <div class="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
+    <a href="/" class="flex items-center gap-2">
+      <Image src={logo} alt="SJ-Tech logotyp" width={40} height={40} class="h-10 w-10" />
+      <span class="text-xl font-bold tracking-wider text-blue-400">SJ-TECH</span>
+    </a>
+    <nav class="flex items-center gap-1 sm:gap-2 text-sm font-medium">
+      {navItems.map((item) => (
+        <a
+          href={item.href}
+          class:list={[
+            'px-3 py-2 rounded-md transition',
+            activePath === item.href
+              ? 'text-blue-400'
+              : 'text-slate-300 hover:text-blue-400',
+          ]}
+        >
+          {item.label}
+        </a>
+      ))}
+      <a href="/#contact-section" class="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-md transition ml-1">Kontakt</a>
+    </nav>
+  </div>
+</header>
