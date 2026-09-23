@@ -91,6 +91,21 @@ for (const product of products) {
     const loadMore = document.getElementById('load-more');
     if (!list) return;
 
+    // Hide product images that fail to load (broken/empty links) so we don't
+    // show a broken-image icon. Use capture phase since 'error' doesn't bubble.
+    document.addEventListener(
+      'error',
+      function (event) {
+        const target = event.target;
+        if (target && target.tagName === 'IMG' && target.closest('#products-list')) {
+          const box = target.closest('[data-image-box]');
+          if (box) box.style.display = 'none';
+          else target.style.display = 'none';
+        }
+      },
+      true
+    );
+
     let page = currentPage;
     let more = hasMore;
     let loading = false;
@@ -103,7 +118,11 @@ for (const product of products) {
 
     function cardHtml(p) {
       const img = p.imageUrl
-        ? '<img src="' + escapeHtml(p.imageUrl) + '" alt="' + escapeHtml(p.name) + '" loading="lazy" class="w-full h-48 object-cover bg-slate-900" />'
+        ? '<div data-image-box class="aspect-[4/3] bg-slate-900"><img src="' +
+          escapeHtml(p.imageUrl) +
+          '" alt="' +
+          escapeHtml(p.name) +
+          '" loading="lazy" class="w-full h-full object-contain" /></div>'
         : '';
       const brand = p.brand
         ? '<p class="text-sm text-slate-400">' + escapeHtml(p.brand) + '</p>'
