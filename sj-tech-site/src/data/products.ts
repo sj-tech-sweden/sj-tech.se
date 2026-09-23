@@ -29,9 +29,14 @@ export interface ProductsPage {
   has_more: boolean;
 }
 
-// Base URL of the rental API. Override with PRODUCTS_API_BASE in production
-// (e.g. https://rental-api.sj-tech.se). Defaults to the local dev instance.
-const API_BASE = process.env.PRODUCTS_API_BASE ?? 'http://localhost:8000';
+// Base URL of the rental API. Set API_BASE (or PRODUCTS_API_BASE) in production
+// to the public origin, e.g. https://rental-api.sj-tech.se. Defaults to the
+// local dev instance. Trailing slashes are trimmed to keep URLs well-formed.
+const API_BASE = (
+  process.env.API_BASE ??
+  process.env.PRODUCTS_API_BASE ??
+  'http://localhost:8000'
+).replace(/\/$/, '');
 
 // How many products to show per page.
 export const PRODUCTS_PAGE_SIZE = 12;
@@ -45,10 +50,17 @@ export async function getProductsPage(page: number): Promise<ProductsPage> {
   const skip = Math.max(0, (page - 1) * PRODUCTS_PAGE_SIZE);
   const url = `${API_BASE}/api/v1/public/products?locale=sv&skip=${skip}&limit=${PRODUCTS_PAGE_SIZE}`;
 
-  const res = await fetch(url);
+  try {
+    const res = await fetch(url);
 
-  if (!res.ok) {
-    throw new Error(`Failed to fetch products: ${res.status} ${res.statusText}`);
+    if (!res.ok) {
+      throw new Error(`Failed to fetch products: ${res.status} ${res.statusText}`);
+    }
+
+    return (await res.json()) as ProductsPage;
+  } catch (error) {
+    console.error(`Could not load products from rental API (${url}):`, error);
+    throw error;
   }
 
   return (await res.json()) as ProductsPage;
