@@ -1,24 +1,185 @@
 ---
 import Layout from '../../layouts/Layout.astro';
 import ProductCard from '../../components/ProductCard.astro';
-import { products } from '../../data/products';
+import { getProductsPage, type RentalProduct } from '../../data/products';
 
-const inStockCount = products.filter((p) => p.inStock).length;
+// Render on demand so the product list stays in sync with the rental API.
+export const prerender = false;
+
+const currentPage = Math.max(1, Number(Astro.url.searchParams.get('page')) || 1);
+
+let products: RentalProduct[] = [];
+let total = 0;
+let hasMore = false;
+let fetchError = false;
+
+try {
+  const pageData = await getProductsPage(currentPage);
+  products = pageData.items;
+  total = pageData.total;
+  hasMore = pageData.has_more;
+} catch (error) {
+  fetchError = true;
+  console.error('Could not load products from rental API:', error);
+}
+
+// Group this page's products by category, preserving first-appearance order.
+const grouped = new Map<string, RentalProduct[]>();
+for (const product of products) {
+  if (!grouped.has(product.category)) {
+    grouped.set(product.category, []);
+  }
+  grouped.get(product.category)!.push(product);
+}
+
 ---
 
 <Layout title="Produkter | SJ-Tech" activePath="/products">
   <section class="py-20 max-w-6xl mx-auto px-4">
     <div class="text-center max-w-2xl mx-auto mb-16">
       <h1 class="text-3xl font-bold text-white mb-4">Produkter & Utrustning</h1>
-      <p class="text-slate-400">
-        För närvarande {inStockCount} av {products.length} produkter i lager. Detta är en förberedande sida – sortimentet byggs på dynamiskt.
-      </p>
+      {fetchError ? (
+        <p class="text-red-400">
+          Vi kunde inte hämta produkterna just nu. Försök igen senare.
+        </p>
+      ) : (
+        <p class="text-slate-400">{total} produkter i sortimentet.</p>
+      )}
     </div>
 
-    <div class="grid md:grid-cols-3 gap-8">
-      {products.map((product) => (
-        <ProductCard product={product} />
-      ))}
-    </div>
+    {!fetchError && products.length > 0 && (
+      <>
+        <div id="products-container">
+          <div class="space-y-16" id="products-list">
+            {[...grouped.entries()].map(([category, items]) => (
+              <div data-category={category}>
+                <h2 class="text-2xl font-bold text-white mb-6">{category}</h2>
+                <div class="grid md:grid-cols-3 gap-8">
+                  {items.map((product) => (
+                    <ProductCard product={product} />
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {hasMore && (
+          <div class="mt-16 flex flex-col items-center gap-4">
+            <a
+              id="load-more"
+              href={`/products?page=${currentPage + 1}`}
+              class="px-6 py-3 rounded-md bg-brand-600 text-white hover:bg-brand-500 transition"
+            >
+              Ladda fler produkter
+            </a>
+            <div id="products-sentinel" class="h-10"></div>
+          </div>
+        )}
+      </>
+    )}
   </section>
 </Layout>
+
+<script
+  is:inline
+  define:vars={{ hasMore: hasMore, currentPage: currentPage }}
+>
+  (function () {
+    const list = document.getElementById('products-list');
+    const sentinel = document.getElementById('products-sentinel');
+    const loadMore = document.getElementById('load-more');
+    if (!list) return;
+
+    let page = currentPage;
+    let more = hasMore;
+    let loading = false;
+
+    function escapeHtml(value) {
+      return String(value ?? '').replace(/[&<>"']/g, function (c) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+      });
+    }
+
+    function cardHtml(p) {
+      const img = p.imageUrl
+        ? '<img src="' + escapeHtml(p.imageUrl) + '" alt="' + escapeHtml(p.name) + '" loading="lazy" class="w-full h-48 object-cover bg-slate-900" />'
+        : '';
+      const brand = p.brand
+        ? '<p class="text-sm text-slate-400">' + escapeHtml(p.brand) + '</p>'
+        : '';
+      return (
+        '<div class="bg-slate-800/50 border border-slate-700/60 rounded-xl overflow-hidden hover:border-brand-500/50 transition">' +
+        img +
+        '<div class="p-6"><h3 class="text-xl font-semibold text-white mb-1">' +
+        escapeHtml(p.name) +
+        '</h3>' +
+        brand +
+        '</div></div>'
+      );
+    }
+
+    function findSection(category) {
+      const sections = list.querySelectorAll('[data-category]');
+      for (const section of sections) {
+        if (section.getAttribute('data-category') === category) return section;
+      }
+      return null;
+    }
+
+    // Append new products into their category section, creating it if needed.
+    function appendItems(items) {
+      for (const p of items) {
+        let section = findSection(p.category);
+        if (!section) {
+          section = document.createElement('div');
+          section.setAttribute('data-category', p.category);
+          section.innerHTML =
+            '<h2 class="text-2xl font-bold text-white mb-6">' +
+            escapeHtml(p.category) +
+            '</h2><div class="grid md:grid-cols-3 gap-8"></div>';
+          list.appendChild(section);
+        }
+        section.querySelector('.grid').insertAdjacentHTML('beforeend', cardHtml(p));
+      }
+    }
+
+    async function loadNext() {
+      if (loading || !more) return;
+      loading = true;
+      try {
+        const res = await fetch('/products/api?page=' + (page + 1));
+        if (!res.ok) throw new Error('fetch failed');
+        const data = await res.json();
+        page += 1;
+        appendItems(data.items);
+        more = data.has_more;
+        if (!more) {
+          if (sentinel) sentinel.style.display = 'none';
+          if (loadMore) loadMore.style.display = 'none';
+        }
+      } catch (err) {
+        console.error('Could not load more products', err);
+      } finally {
+        loading = false;
+      }
+    }
+
+    if (loadMore) {
+      loadMore.addEventListener('click', function (e) {
+        e.preventDefault();
+        loadNext();
+      });
+    }
+
+    if (sentinel && more) {
+      const observer = new IntersectionObserver(
+        function (entries) {
+          if (entries[0].isIntersecting) loadNext();
+        },
+        { rootMargin: '400px' }
+      );
+      observer.observe(sentinel);
+    }
+  })();
+</script>
